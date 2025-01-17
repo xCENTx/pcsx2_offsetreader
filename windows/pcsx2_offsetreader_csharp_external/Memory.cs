@@ -255,21 +255,25 @@ namespace pcsx2_offsetreader_csharp_external
             return result;
         }
 
-        public static IntPtr GetAddr(int offset)
+        public static IntPtr GetAddress(int offset)
         {
             return ProcModBase + offset;
         }
 
-        public static IntPtr GetProcAddr(string pName)
+        public static IntPtr GetProcAddress(string pName)
         {
             IntPtr result = IntPtr.Zero;
             string key = pName.ToLower();
 
             //  Read DOS header
             IMAGE_DOS_HEADER dosHeader = ReadStruct<IMAGE_DOS_HEADER>(ProcModBase);
+            if (dosHeader.e_magic != 0x5A4D) // 'MZ'
+                return result;
 
             //  Read PE header
             IMAGE_NT_HEADERS ntHeader = ReadStruct<IMAGE_NT_HEADERS>(ProcModBase + dosHeader.e_lfanew);
+            if (ntHeader.Signature != 0x00004550) // 'PE'
+                return result;
 
             // Enumerate Directories
             foreach ( IMAGE_DATA_DIRECTORY dir in ntHeader.OptionalHeader.DataDirectory)
@@ -284,6 +288,7 @@ namespace pcsx2_offsetreader_csharp_external
                 if (exports.NumberOfNames != exports.NumberOfFunctions || exports.AddressOfNames == 0 || exports.AddressOfFunctions == 0 || exports.AddressOfNameOrdinals == 0)
                     continue;
 
+                //  Read address offsets into an array
                 uint[] namesRvaArray = ReadArray<uint>((IntPtr)(ProcModBase.ToInt64() + exports.AddressOfNames), (int)exports.NumberOfNames);
                 uint[] functionsRvaArray = ReadArray<uint>((IntPtr)(ProcModBase.ToInt64() + exports.AddressOfFunctions), (int)exports.NumberOfFunctions);
                 ushort[] nameOrdinalsArray = ReadArray<ushort>((IntPtr)(ProcModBase.ToInt64() + exports.AddressOfNameOrdinals), (int)exports.NumberOfNames);
@@ -305,7 +310,9 @@ namespace pcsx2_offsetreader_csharp_external
                 if (rva == 0)
                     continue;
 
-                uint functionRva = functionsRvaArray[nameOrdinalsArray[index]];
+                //	get function address
+                int ordinal_index = nameOrdinalsArray[index];//	get ordinal at the current index
+                uint functionRva = functionsRvaArray[ordinal_index]; //	get function va from the ordinal index of the functions array
                 if (functionRva <= 0)
                     continue;
 
